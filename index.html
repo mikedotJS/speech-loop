@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Speech Loop</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #f4f4f8;
+      }
+      .app-shell {
+        max-width: 640px;
+        margin: 0 auto;
+        background: #fff;
+        border-radius: 16px;
+        padding: 28px;
+        box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12);
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 1.8rem;
+        letter-spacing: -0.02em;
+      }
+      label {
+        font-weight: 600;
+        font-size: 0.9rem;
+        display: block;
+        margin-bottom: 6px;
+      }
+      input,
+      textarea,
+      button {
+        font: inherit;
+      }
+      textarea,
+      input[type='number'] {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid #d4d8e3;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        background: #fdfdfd;
+      }
+      textarea {
+        min-height: 120px;
+      }
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin: 20px 0;
+      }
+      .number-input {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .sentence-list {
+        margin: 20px 0;
+        padding: 0;
+        list-style: none;
+      }
+      .sentence-list li {
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #e3e5ef;
+        margin-bottom: 8px;
+        background: #fafbff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+      .sentence-list button {
+        background: none;
+        border: none;
+        color: #ef4444;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+      }
+      .actions button {
+        flex: 1;
+        padding: 12px;
+        border-radius: 10px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .actions button.primary {
+        background: #2563eb;
+        color: white;
+      }
+      .actions button.secondary {
+        background: #e2e8f0;
+      }
+      .muted {
+        font-size: 0.85rem;
+        color: #6b7280;
+      }
+      .status {
+        margin-top: 8px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #eef2ff;
+        color: #3730a3;
+        font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+      const { useState, useEffect, useRef } = React;
+
+      const defaultSentences = [
+        'Remember to hydrate.',
+        'Focus on clear articulation.',
+        'Project confidence in every sentence.'
+      ];
+
+      const toMs = (seconds) => Math.max(Number(seconds) || 0, 0) * 1000;
+
+      function SpeechLoopApp() {
+        const [sentences, setSentences] = useState(defaultSentences);
+        const [input, setInput] = useState(defaultSentences.join('\n'));
+        const [betweenSentences, setBetweenSentences] = useState(4);
+        const [betweenLoops, setBetweenLoops] = useState(8);
+        const [isRunning, setIsRunning] = useState(false);
+        const [currentStatus, setCurrentStatus] = useState('idle');
+        const loopRef = useRef({
+          timeouts: [],
+          loopCount: 0,
+          isRunning: false
+        });
+
+        const speakSentence = (text) => {
+          const utterance = new SpeechSynthesisUtterance(text);
+          speechSynthesis.speak(utterance);
+        };
+
+        const clearTimers = () => {
+          loopRef.current.timeouts.forEach(clearTimeout);
+          loopRef.current.timeouts = [];
+        };
+
+        const resetLoopState = () => {
+          loopRef.current.isRunning = false;
+          clearTimers();
+          setIsRunning(false);
+          setCurrentStatus('idle');
+          loopRef.current.loopCount = 0;
+        };
+
+        const scheduleLoop = () => {
+          const loopId = loopRef.current.loopCount + 1;
+          setCurrentStatus(`Loop #${loopId} running`);
+
+          sentences.forEach((sentence, index) => {
+            const timeoutId = setTimeout(() => {
+              setCurrentStatus(`Loop #${loopId}: speaking sentence ${index + 1}`);
+              speakSentence(sentence);
+            }, toMs(betweenSentences) * index);
+            loopRef.current.timeouts.push(timeoutId);
+          });
+
+          const loopDuration = sentences.length
+            ? toMs(betweenSentences) * Math.max(sentences.length - 1, 0)
+            : 0;
+          const nextLoopDelay = loopDuration + toMs(betweenLoops);
+
+          const loopDoneId = setTimeout(() => {
+            loopRef.current.loopCount += 1;
+            setCurrentStatus(`Loop #${loopRef.current.loopCount} finished`);
+            if (loopRef.current.isRunning) {
+              scheduleLoop();
+            }
+          }, nextLoopDelay);
+
+          loopRef.current.timeouts.push(loopDoneId);
+        };
+
+        const handleStart = () => {
+          if (!sentences.length || isRunning) return;
+          loopRef.current.isRunning = true;
+          loopRef.current.loopCount = 0;
+          setIsRunning(true);
+          scheduleLoop();
+        };
+
+        const handleStop = () => {
+          resetLoopState();
+          speechSynthesis.cancel();
+        };
+
+        const handleApplySentences = () => {
+          const next = input
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+          setSentences(next);
+          setInput(next.join('\n'));
+        };
+
+        useEffect(() => {
+          return () => {
+            clearTimers();
+            speechSynthesis.cancel();
+          };
+        }, []);
+
+        return (
+          <main className="app-shell">
+            <h1>Speech Loop</h1>
+            <p className="muted">
+              List a few sentences, choose timing, then press start. The browser's speech
+              synthesis voices will handle pronunciation.
+            </p>
+
+            <section>
+              <label htmlFor="sentences">Sentences (one per line)</label>
+              <textarea
+                id="sentences"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Enter each sentence on a new line"
+              ></textarea>
+              <button style={{ marginTop: '10px' }} onClick={handleApplySentences}>
+                Update sentences
+              </button>
+            </section>
+
+            <section className="controls">
+              <div className="number-input">
+                <label htmlFor="between-sentences">Seconds between sentences</label>
+                <input
+                  id="between-sentences"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={betweenSentences}
+                  onChange={(event) => setBetweenSentences(Number(event.target.value))}
+                />
+              </div>
+
+              <div className="number-input">
+                <label htmlFor="between-loops">Seconds between loops</label>
+                <input
+                  id="between-loops"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={betweenLoops}
+                  onChange={(event) => setBetweenLoops(Number(event.target.value))}
+                />
+              </div>
+            </section>
+
+            <section>
+              <h2 style={{ marginBottom: '12px' }}>Active sentences</h2>
+              {sentences.length ? (
+                <ul className="sentence-list">
+                  {sentences.map((sentence, index) => (
+                    <li key={`${sentence}-${index}`}>
+                      <span>{sentence}</span>
+                      <button
+                        title="Remove sentence"
+                        onClick={() => {
+                          setSentences((prev) => {
+                            const next = prev.filter((_, i) => i !== index);
+                            setInput(next.join('\n'));
+                            return next;
+                          });
+                        }}
+                      >
+                        remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">No sentences queued. Add a few above.</p>
+              )}
+            </section>
+
+            <section className="actions">
+              <button className="secondary" onClick={handleStop} disabled={!isRunning}>
+                Stop
+              </button>
+              <button className="primary" onClick={handleStart} disabled={isRunning}>
+                Start loop
+              </button>
+            </section>
+
+            <div className="status">
+              Status: {currentStatus}
+              {isRunning && sentences.length > 0 && (
+                <span>
+                  {' '}
+                  • {sentences.length} sentence{sentences.length === 1 ? '' : 's'} per loop
+                </span>
+              )}
+            </div>
+          </main>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<SpeechLoopApp />);
+    </script>
+  </body>
+</html>
